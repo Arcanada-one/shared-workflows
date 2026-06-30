@@ -1,0 +1,101 @@
+# Reusable deploy workflow for Arcanada ecosystem static / PHP sites.
+# Source of truth: INFRA-0302 (parent INFRA-0299). Consumed cross-org via a
+# thin per-site caller. Atomic install = temp-dir + double mv (NOT symlink-swap:
+# php-fpm opcache caches by realpath; symlink-swap would need an fpm reload that
+# is not in the ci-runner sudoers). See
+# datarim/creative/creative-INFRA-0299-architecture-atomic-deploy.md.
+name: deploy-static-site
+
+on:
+  workflow_call:
+    inputs:
+      domain:
+        description: Public domain (Host header for the health check).
+        required: true
+        type: string
+      webroot:
+        description: Server webroot directory under /var/www (may differ from domain).
+        required: true
+        type: string
+      build:
+        description: Optional build command run before install (e.g. "npm run build:css").
+        required: false
+        type: string
+        default: ""
+      health_scheme:
+        description: Scheme for the post-deploy health probe (http or https).
+        required: false
+        type: string
+        default: http
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, arcana-www, sites]
+    concurrency:
+      # Per-domain serialization; never cancel a deploy mid-flight — an
+      # interrupted rsync/mv leaves the webroot in a torn state.
+      group: deploy-${{ inputs.domain }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout site content
+        uses: actions/checkout@v4
+
+      - name: Optional build step
+        if: inputs.build != ''
+        run: ${{ inputs.build }}
+
+      - name: Atomic install (temp-dir + double mv)
+        env:
+          WEBROOT: ${{ inputs.webroot }}
+        run: |
+          set -euo pipefail
+          # WEBROOT is a fixed value resolved from the deploy.sh resolve_webroot
+          # table by the caller — not free user input (Security Mandate S5).
+          dst="/var/www/${WEBROOT}"
+          sha="${GITHUB_SHA::8}"
+          next="${dst}.next.${sha}"
+          rsync -a --delete --exclude='.git' --exclude='.github' ./ "${next}/"
+          if [ -d "${dst}" ]; then
+            rm -rf "${dst}.old"
+            mv "${dst}" "${dst}.old"
+          fi
+          mv "${next}" "${dst}"
+
+      - name: Health check with rollback
+        env:
+          DOMAIN: ${{ inputs.domain }}
+          WEBROOT: ${{ inputs.webroot }}
+          SCHEME: ${{ inputs.health_scheme }}
+        run: |
+          set -euo pipefail
+          dst="/var/www/${WEBROOT}"
+          code="$(curl -fsS -o /dev/null -w '%{http_code}' \
+            --resolve "${DOMAIN}:80:127.0.0.1" \
+            --resolve "${DOMAIN}:443:127.0.0.1" \
+            "${SCHEME}://${DOMAIN}/" || echo 000)"
+          if [ "${code}" != "200" ]; then
+            echo "::error::health check returned ${code} for ${DOMAIN} — rolling back"
+            if [ -d "${dst}.old" ]; then
+              rm -rf "${dst}"
+              mv "${dst}.old" "${dst}"
+            fi
+            exit 1
+          fi
+          echo "health check OK (${code}) for ${DOMAIN}"
+
+      - name: Notify Ops Bot on failure
+        if: failure()
+        env:
+          OPSBOT_URL: ${{ secrets.OPSBOT_URL }}
+          OPSBOT_KEY: ${{ secrets.OPSBOT_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPSBOT_URL:-}" ] || [ -z "${OPSBOT_KEY:-}" ]; then
+            echo "Ops Bot secrets not set on this runner — skipping notification"
+            exit 0
+          fi
+          curl -fsS -X POST "${OPSBOT_URL}" \
+            -H "Authorization: Bearer ${OPSBOT_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"category\":\"fatal\",\"agent\":\"deploy-static-site\",\"body\":\"deploy ${{ inputs.domain }} failed (run ${GITHUB_RUN_ID})\"}" \
+            || echo "Ops Bot notification failed (non-fatal)"
