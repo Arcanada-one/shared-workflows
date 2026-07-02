@@ -16,6 +16,12 @@ Push-to-main deploy for static / PHP sites onto the `arcana-www` self-hosted
 runner. Atomic install via temp-dir + double `mv` (opcache-safe — no fpm reload
 needed). Inputs: `domain`, `webroot`, optional `build`, `health_scheme`.
 
+The post-deploy health check follows redirects (`curl -L`) and accepts any
+final `2xx`: a site whose `/` issues a language/canonical redirect
+(e.g. `/` → `/en/`) is healthy when the chain lands on a `2xx`. A `3xx` that
+`-L` cannot follow (off-host `Location`), or any `4xx`/`5xx`/connection error,
+triggers rollback to the previous webroot.
+
 Caller example (in a private site repo, `.github/workflows/deploy.yml`):
 
 ```yaml

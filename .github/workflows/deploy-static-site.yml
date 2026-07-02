@@ -69,11 +69,19 @@ jobs:
         run: |
           set -euo pipefail
           dst="/var/www/${WEBROOT}"
-          code="$(curl -fsS -o /dev/null -w '%{http_code}' \
+          # -L follows redirects: sites with a language/canonical redirect
+          # (e.g. `/` -> `/en/`) return 301/302 on `/`; the healthy signal is
+          # the FINAL 2xx after the chain, not the first hop. %{http_code} with
+          # -L reports the last response's code. --resolve pins both :80 and
+          # :443 to loopback so the probe hits this host regardless of scheme.
+          code="$(curl -fsSL -o /dev/null -w '%{http_code}' \
             --resolve "${DOMAIN}:80:127.0.0.1" \
             --resolve "${DOMAIN}:443:127.0.0.1" \
             "${SCHEME}://${DOMAIN}/" || echo 000)"
-          if [ "${code}" != "200" ]; then
+          # Accept any final 2xx (200/204/etc). A 3xx here means -L stopped on a
+          # redirect it could not follow (e.g. off-host Location) — treat as
+          # unhealthy and roll back.
+          if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
             echo "::error::health check returned ${code} for ${DOMAIN} — rolling back"
             if [ -d "${dst}.old" ]; then
               rm -rf "${dst}"
