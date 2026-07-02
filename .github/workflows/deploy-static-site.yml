@@ -74,7 +74,14 @@ jobs:
           # the FINAL 2xx after the chain, not the first hop. %{http_code} with
           # -L reports the last response's code. --resolve pins both :80 and
           # :443 to loopback so the probe hits this host regardless of scheme.
-          code="$(curl -fsSL -o /dev/null -w '%{http_code}' \
+          # -k (insecure): this probe bypasses the CDN by resolving to 127.0.0.1,
+          # so it reaches the ORIGIN nginx directly and sees the origin cert
+          # (a Cloudflare origin cert / self-signed, not a publicly-trusted
+          # chain). The probe's job is to confirm the LOCAL webroot serves a 2xx,
+          # not to validate the edge TLS chain — Cloudflare owns edge TLS. Without
+          # -k, an http:// start that 301-redirects to https:// fails cert
+          # verification on loopback (curl 60) even though the site is healthy.
+          code="$(curl -fsSLk -o /dev/null -w '%{http_code}' \
             --resolve "${DOMAIN}:80:127.0.0.1" \
             --resolve "${DOMAIN}:443:127.0.0.1" \
             "${SCHEME}://${DOMAIN}/" || echo 000)"
