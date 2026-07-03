@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.2 — 2026-07-03
+
+- **feat(deploy-static-site):** footer build-stamp — a new step writes
+  `build-info.php` (`$config['build_sha'] = '<short-sha>'`) from this site repo's
+  `github.sha` into the checked-out tree before the atomic install. Parity with
+  `Projects/Websites/deploy.sh` `write_build_stamp`: preserves the footer build-SHA
+  and the ecosystem drift detector (`check-repo-site-sync.sh`) after a site migrates
+  off `deploy.sh` to gh-actions. Under gh-actions the site repo is the payload's
+  source of truth, so `github.sha` is the correct stamp (not a cross-repo SHA). (INFRA-0320)
+- **feat(deploy-static-site):** Cloudflare cache purge (opt-in) — after a green
+  health check, purges the deployed domain's CF zone (`purge_everything`) so direct
+  links reflect the deploy immediately. Parity with `deploy.sh`. Fail-soft: if the
+  `CF_API_TOKEN` secret is unset, or the domain is not a CF zone, the purge is
+  skipped with a note — the deploy already succeeded and the edge cache self-expires.
+  Migration stays unblocked when the CF secret is not yet provisioned. (INFRA-0320)
+- The floating `v1` tag is moved to this commit so existing `@v1` callers pick up
+  both features; `v1.2` is the immutable pin.
+
 ## v1.1 — 2026-07-02
 
 - **fix(deploy-static-site):** health check now follows redirects (`curl -fsSL`)
