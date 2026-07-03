@@ -54,6 +54,16 @@ jobs:
       - name: Checkout site content
         uses: actions/checkout@v4
 
+      - name: Set up Node.js (only when a build is requested)
+        # The arcana-www runner has no system Node; a build like
+        # `npm ci && npm run build:css` (datarim.club Tailwind) needs it. setup-node
+        # provisions Node into the runner toolcache on demand. Skipped entirely for
+        # the static sites (no build input), so it costs nothing there.
+        if: inputs.build != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Optional build step
         if: inputs.build != ''
         run: ${{ inputs.build }}
