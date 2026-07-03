@@ -27,6 +27,20 @@ on:
         required: false
         type: string
         default: http
+    secrets:
+      # Declared optional so a caller MAY pass them explicitly; `secrets: inherit`
+      # in the caller also satisfies these. Both the CF cache purge and the Ops Bot
+      # notification are opt-in and fail-soft when the corresponding secret is
+      # absent, so a caller that provides none still deploys green.
+      CF_API_TOKEN:
+        description: Cloudflare API token (Cache Purge:Purge) for the post-deploy cache purge. Optional.
+        required: false
+      OPSBOT_URL:
+        description: Ops Bot events endpoint for failure notifications. Optional.
+        required: false
+      OPSBOT_KEY:
+        description: Ops Bot bearer token for failure notifications. Optional.
+        required: false
 
 jobs:
   deploy:
