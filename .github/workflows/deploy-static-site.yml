@@ -100,6 +100,20 @@ jobs:
           sha="${GITHUB_SHA::8}"
           next="${dst}.next.${sha}"
           rsync -a --delete --exclude='.git' --exclude='.github' ./ "${next}/"
+          # Preserve server-side runtime secrets that live IN the webroot but are
+          # NOT in the repo (they are gitignored — e.g. a production .env carrying
+          # DB credentials). The repo payload has no .env, so a plain replace would
+          # wipe it and break the site's DB connection on the next deploy. Carry
+          # any existing webroot .env / .env.* forward into the fresh payload so the
+          # DB link survives. deploy.sh never had this problem because it rsynced
+          # INTO the live dir (no --delete of dotfiles it didn't know about); the
+          # atomic-replace model must reinstate them explicitly. Safe when absent.
+          if [ -d "${dst}" ]; then
+            for envf in "${dst}"/.env "${dst}"/.env.*; do
+              [ -e "${envf}" ] || continue
+              cp -a "${envf}" "${next}/" 2>/dev/null || true
+            done
+          fi
           if [ -d "${dst}" ]; then
             # Retire the previous webroot by RENAME, never rm -rf, so a stale
             # ${dst}.old owned by a different uid (legacy deploy.sh ran under root;
