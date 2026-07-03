@@ -169,6 +169,8 @@ jobs:
           # deploy itself already succeeded and the edge cache self-expires. This
           # keeps migration unblocked when the CF secret is not yet in place.
           # Runs only after a green health check (this step is unreached on rollback).
+          # DIAG (INFRA-0320, temporary): report secret arrival without leaking it.
+          echo "DIAG: CF_API_TOKEN length=${#CF_API_TOKEN} (0 = secret did not reach the reusable step)"
           if [ -z "${CF_API_TOKEN:-}" ]; then
             echo "NOTE: CF_API_TOKEN secret not set — skipping Cloudflare cache purge (edge self-expires)."
             exit 0
