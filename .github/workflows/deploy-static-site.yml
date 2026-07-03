@@ -77,8 +77,18 @@ jobs:
           next="${dst}.next.${sha}"
           rsync -a --delete --exclude='.git' --exclude='.github' ./ "${next}/"
           if [ -d "${dst}" ]; then
-            rm -rf "${dst}.old"
-            mv "${dst}" "${dst}.old"
+            # Retire the previous webroot by RENAME, never rm -rf, so a stale
+            # ${dst}.old owned by a different uid (legacy deploy.sh ran under root;
+            # the runner is ci-runner without sudo) cannot block the deploy with
+            # "rm: Permission denied" on files the runner does not own. mv only
+            # needs write on the parent dir (/var/www, ACL-granted to ci-runner) —
+            # not ownership of the tree's contents. The stamped ${sha} makes the
+            # retired name unique so concurrent-safe and idempotent on re-run.
+            # A separate janitor (cron, www-data) reaps ${dst}.old.* — the deploy
+            # path never deletes foreign-owned trees. On rollback the health-check
+            # step restores from the most recent ${dst}.old.* (see below).
+            rm -rf "${dst}.old.${sha}" 2>/dev/null || true
+            mv "${dst}" "${dst}.old.${sha}"
           fi
           mv "${next}" "${dst}"
 
@@ -111,9 +121,20 @@ jobs:
           # unhealthy and roll back.
           if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
             echo "::error::health check returned ${code} for ${DOMAIN} — rolling back"
-            if [ -d "${dst}.old" ]; then
-              rm -rf "${dst}"
-              mv "${dst}.old" "${dst}"
+            # Restore from the most recent retired webroot. The install step now
+            # retires by rename to ${dst}.old.<sha> (never rm -rf), so pick the
+            # newest by mtime. Move the just-installed (broken) tree aside by
+            # rename too — never rm -rf it, in case it is foreign-owned; a janitor
+            # reaps ${dst}.broken.* / ${dst}.old.* later. If no retired webroot
+            # exists (first-ever deploy), there is nothing to roll back to; leave
+            # the deploy in place and fail the run so the operator is alerted.
+            # Newest retired webroot by mtime; find+sort handles any filename and
+            # satisfies shellcheck SC2012. The suffix is a hex sha, so this is
+            # a controlled glob, but find keeps it robust.
+            prev="$(find /var/www -maxdepth 1 -type d -name "$(basename "${dst}").old.*" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)"
+            if [ -n "${prev}" ] && [ -d "${prev}" ]; then
+              [ -d "${dst}" ] && mv "${dst}" "${dst}.broken.$(date +%s 2>/dev/null || echo x)" 2>/dev/null || true
+              mv "${prev}" "${dst}"
             fi
             exit 1
           fi
