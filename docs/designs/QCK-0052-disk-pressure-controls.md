@@ -61,7 +61,7 @@ The existing workflow uses rename-based atomic installation, not symlinks:
 
 ### 4. Safe runner‑workdir janitor
 
-A separate **reusable workflow** (`janitor.yml`) and an accompanying composite action. It is meant to be triggered manually (`workflow_dispatch`) or on a cron schedule on self‑hosted runners, but **not** during a deployment.
+A separate reusable workflow (`runner-workdir-janitor.yml`) and shell helper. Because this repository is public, it has no direct schedule or manual self-hosted trigger; a trusted private consumer owns the schedule and calls it with `workflow_call`. It is never invoked during a deployment.
 
 **Safety gates (order of execution):**
 1. **Active worker detection** – scan the process table for `Runner.Worker`. `Runner.Listener` is expected to be permanently active and does not indicate a running job. If any worker exists, set `runner_busy=true` and exit without deletion.
