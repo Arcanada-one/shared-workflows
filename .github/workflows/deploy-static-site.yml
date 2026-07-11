@@ -74,6 +74,16 @@ jobs:
       - name: Checkout site content
         uses: actions/checkout@v4
 
+      - name: Checkout shared deployment controls
+        uses: actions/checkout@v4
+        with:
+          repository: Arcanada-one/shared-workflows
+          ref: v1
+          path: .shared-workflows
+
+      - name: Check disk capacity before build
+        run: bash .shared-workflows/scripts/check-disk.sh "$GITHUB_WORKSPACE"
+
       - name: Set up Node.js (only when a build is requested)
         # The arcana-www runner has no system Node; a build like
         # `npm ci && npm run build:css` (datarim.club Tailwind) needs it. setup-node
@@ -147,7 +157,7 @@ jobs:
           case "${PUBLISH_DIR}" in
             /*|*..*) echo "::error::publish_dir '${PUBLISH_DIR}' is absolute or contains '..' — refusing (Security S5)"; exit 1 ;;
           esac
-          rsync -a --delete --exclude='.git' --exclude='.github' "./${PUBLISH_DIR}/" "${next}/"
+          bash .shared-workflows/scripts/sync-publish-tree.sh "./${PUBLISH_DIR}" "${next}"
           # Preserve server-side runtime secrets that live IN the webroot but are
           # NOT in the repo (they are gitignored — e.g. a production .env carrying
           # DB credentials). The repo payload has no .env, so a plain replace would
@@ -225,6 +235,11 @@ jobs:
             exit 1
           fi
           echo "health check OK (${code}) for ${DOMAIN}"
+
+      - name: Prune old webroot generations
+        env:
+          WEBROOT: ${{ inputs.webroot }}
+        run: bash .shared-workflows/scripts/prune-webroot-generations.sh "$WEBROOT"
 
       - name: Cloudflare cache purge (opt-in)
         env:
