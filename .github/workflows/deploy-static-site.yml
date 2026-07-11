@@ -72,10 +72,10 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout site content
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Checkout shared deployment controls
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: Arcanada-one/shared-workflows
           ref: v1
@@ -90,7 +90,7 @@ jobs:
         # provisions Node into the runner toolcache on demand. Skipped entirely for
         # the static sites (no build input), so it costs nothing there.
         if: inputs.build != ''
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           # Default '20' keeps every current @v1 build consumer unchanged; build
           # sites on an older Angular pin an older Node via node_version (INFRA-0331).
