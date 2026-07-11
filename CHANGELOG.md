@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.3 — 2026-07-11
+
+- **fix(deploy-static-site):** warn at 80% disk usage and stop before build at
+  90%; exclude dependency/cache directories from every publish payload; retain
+  only the two newest rename-based rollback generations after a green health check.
+- **feat(runner-workdir-janitor):** add a dry-run-first reusable janitor for
+  trusted private callers. It refuses cleanup while `Runner.Worker` is active and
+  deletes only reproducible artifacts below explicitly configured runner roots.
+- Regression coverage: deterministic Bats suites for thresholds, rsync filters,
+  rollback retention, path/symlink guards, dry-run behavior, and busy runners.
+  (QCK-0052)
+
 ## v1.2 — 2026-07-03
 
 - **feat(deploy-static-site):** footer build-stamp — a new step writes
