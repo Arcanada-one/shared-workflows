@@ -20,7 +20,11 @@ if ! mkdir "$lock_dir" 2>/dev/null; then
   echo "[prune-webroot] another prune is active for $webroot" >&2
   exit 3
 fi
-cleanup_lock() { rmdir "$lock_dir" 2>/dev/null || true; }
+sorted_tmp=""
+cleanup_lock() {
+  [[ -z "$sorted_tmp" ]] || rm -f "$sorted_tmp"
+  rmdir "$lock_dir" 2>/dev/null || true
+}
 trap cleanup_lock EXIT
 
 records=()
@@ -46,7 +50,6 @@ fi
 mapfile_cmd="mapfile"
 if ! command -v "$mapfile_cmd" >/dev/null 2>&1; then
   sorted_tmp="$(mktemp)"
-  trap 'rm -f "$sorted_tmp"' EXIT
   printf '%s\n' "${records[@]}" | sort -rn > "$sorted_tmp"
   sorted=()
   while IFS= read -r line; do sorted+=("$line"); done < "$sorted_tmp"

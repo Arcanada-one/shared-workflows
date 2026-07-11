@@ -46,7 +46,11 @@ setup() {
     && [ -d "$parent/site.old.333" ] \
     && [ -d "$parent/site.old.444" ] \
     && [ -d "$parent/site" ] \
-    && [ -d "$parent/site.broken.555" ]
+    && [ -d "$parent/site.broken.555" ] \
+    && [ ! -e "$parent/.site.prune.lock" ]
+
+  run env WEBROOT_PARENT="$parent" bash "$PRUNE_SCRIPT" site
+  [ "$status" -eq 0 ] && [ ! -e "$parent/.site.prune.lock" ]
 }
 
 @test "pruning rejects unsafe webroot names without deletion" {
@@ -83,4 +87,9 @@ setup() {
     && [ -n "$prune_line" ] \
     && [ "$disk_line" -lt "$build_line" ] \
     && [ "$prune_line" -gt "$health_line" ]
+}
+
+@test "janitor workflow restricts execution to the trusted private caller" {
+  workflow="$BATS_TEST_DIRNAME/../.github/workflows/runner-workdir-janitor.yml"
+  grep -qF "github.repository == 'Arcanada-one/datarim-club-site'" "$workflow"
 }

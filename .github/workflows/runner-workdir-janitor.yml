@@ -18,6 +18,7 @@ on:
 
 jobs:
   janitor:
+    if: github.repository == 'Arcanada-one/datarim-club-site'
     runs-on: [self-hosted, linux, arcana-www, sites]
     outputs:
       runner_busy: ${{ steps.cleanup.outputs.runner_busy }}
