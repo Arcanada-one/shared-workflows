@@ -21,7 +21,8 @@ setup() {
 run_janitor() {
   run env HOME="$BATS_TEST_TMPDIR/home" RUNNER_ROOTS="$ROOT" \
     JANITOR_REPORT="$REPORT" GITHUB_OUTPUT="$OUTPUT_FILE" \
-    RUNNER_WORKER_OVERRIDE="${RUNNER_WORKER_OVERRIDE:-0}" \
+    RUNNER_WORKER_PIDS_OVERRIDE="${RUNNER_WORKER_PIDS_OVERRIDE:-}" \
+    SELF_RUNNER_WORKER_PID_OVERRIDE="${SELF_RUNNER_WORKER_PID_OVERRIDE:-}" \
     DRY_RUN="${DRY_RUN:-true}" bash "$SCRIPT"
 }
 
@@ -48,7 +49,7 @@ run_janitor() {
 }
 
 @test "active Runner.Worker blocks all deletion" {
-  RUNNER_WORKER_OVERRIDE=1 DRY_RUN=false run_janitor
+  RUNNER_WORKER_PIDS_OVERRIDE=123 DRY_RUN=false run_janitor
   [ "$status" -eq 3 ] \
     && [[ "$output" == *"Runner.Worker is active"* ]] \
     && [ -d "$WORKSPACE/node_modules" ] \
@@ -56,16 +57,41 @@ run_janitor() {
 }
 
 @test "Runner.Listener alone does not block cleanup" {
-  RUNNER_WORKER_OVERRIDE=0 DRY_RUN=false run_janitor
+  RUNNER_WORKER_PIDS_OVERRIDE=none DRY_RUN=false run_janitor
   [ "$status" -eq 0 ] && [ ! -e "$WORKSPACE/node_modules" ]
+}
+
+@test "janitor allows only its own Runner.Worker ancestor" {
+  RUNNER_WORKER_PIDS_OVERRIDE=123 SELF_RUNNER_WORKER_PID_OVERRIDE=123 DRY_RUN=false run_janitor
+  [ "$status" -eq 0 ] && [ ! -e "$WORKSPACE/node_modules" ]
+}
+
+@test "janitor blocks when another worker exists beside its own" {
+  RUNNER_WORKER_PIDS_OVERRIDE='123 456' SELF_RUNNER_WORKER_PID_OVERRIDE=123 DRY_RUN=false run_janitor
+  [ "$status" -eq 3 ] && [ -d "$WORKSPACE/node_modules" ]
 }
 
 @test "relative runner root is rejected" {
   run env HOME="$BATS_TEST_TMPDIR/home" RUNNER_ROOTS='./runner' \
-    RUNNER_WORKER_OVERRIDE=0 bash "$SCRIPT"
+    RUNNER_WORKER_PIDS_OVERRIDE=none bash "$SCRIPT"
   [ "$status" -eq 2 ] \
     && [[ "$output" == *"runner root must be absolute"* ]] \
     && [ -d "$WORKSPACE/node_modules" ]
+}
+
+@test "all runner roots validate before any deletion" {
+  DRY_RUN=false
+  run env HOME="$BATS_TEST_TMPDIR/home" RUNNER_ROOTS="$ROOT,./invalid" \
+    RUNNER_WORKER_PIDS_OVERRIDE=none DRY_RUN=false bash "$SCRIPT"
+  [ "$status" -eq 2 ] && [ -d "$WORKSPACE/node_modules" ]
+}
+
+@test "mismatched workspace pair and reserved workdirs are untouched" {
+  mkdir -p "$ROOT/_work/one/two/node_modules" "$ROOT/_work/_temp/job/node_modules"
+  RUNNER_WORKER_PIDS_OVERRIDE=none DRY_RUN=false run_janitor
+  [ "$status" -eq 0 ] \
+    && [ -d "$ROOT/_work/one/two/node_modules" ] \
+    && [ -d "$ROOT/_work/_temp/job/node_modules" ]
 }
 
 @test "symlink candidate is refused and external target is untouched" {

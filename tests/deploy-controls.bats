@@ -66,6 +66,13 @@ setup() {
     && [ -d "$parent/outside" ]
 }
 
+@test "pruning refuses a concurrent lock holder" {
+  parent="$BATS_TEST_TMPDIR/www"
+  mkdir -p "$parent/site" "$parent/.site.prune.lock"
+  run env WEBROOT_PARENT="$parent" bash "$PRUNE_SCRIPT" site
+  [ "$status" -eq 3 ] && [ -d "$parent/site" ]
+}
+
 @test "workflow invokes disk check before optional build and prunes after health" {
   workflow="$BATS_TEST_DIRNAME/../.github/workflows/deploy-static-site.yml"
   disk_line="$(grep -n 'Check disk capacity before build' "$workflow" | cut -d: -f1)"

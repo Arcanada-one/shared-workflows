@@ -3,19 +3,25 @@ name: runner-workdir-janitor
 on:
   workflow_call:
     inputs:
-      runner_roots:
-        description: Comma-separated absolute runner installation roots.
-        required: true
-        type: string
       dry_run:
         description: Report candidates without deleting them.
         required: false
         type: boolean
         default: true
+    outputs:
+      runner_busy:
+        description: Whether another Runner.Worker blocked cleanup.
+        value: ${{ jobs.janitor.outputs.runner_busy }}
+      total_bytes_reclaimed:
+        description: Bytes reclaimed by a real run.
+        value: ${{ jobs.janitor.outputs.total_bytes_reclaimed }}
 
 jobs:
   janitor:
     runs-on: [self-hosted, linux, arcana-www, sites]
+    outputs:
+      runner_busy: ${{ steps.cleanup.outputs.runner_busy }}
+      total_bytes_reclaimed: ${{ steps.cleanup.outputs.total_bytes_reclaimed }}
     steps:
       - name: Checkout trusted janitor implementation
         uses: actions/checkout@v4
@@ -25,8 +31,9 @@ jobs:
           path: .janitor-controls
 
       - name: Clean idle runner workdirs
+        id: cleanup
         env:
-          RUNNER_ROOTS: ${{ inputs.runner_roots }}
+          RUNNER_ROOTS: /opt/actions-runner-arcanada,/opt/actions-runner-angryrobotdeals
           DRY_RUN: ${{ inputs.dry_run }}
           JANITOR_REPORT: ${{ runner.temp }}/runner-janitor-report.txt
         run: bash .janitor-controls/scripts/runner-workdir-janitor.sh

@@ -66,7 +66,7 @@ A separate reusable workflow (`runner-workdir-janitor.yml`) and shell helper. Be
 **Safety gates (order of execution):**
 1. **Active worker detection** – scan the process table for `Runner.Worker`. `Runner.Listener` is expected to be permanently active and does not indicate a running job. If any worker exists, set `runner_busy=true` and exit without deletion.
 2. **Dry‑run support** – input `dry_run` (default `true` for safety). When set, all deletions are logged and sized but not executed.
-3. **Target roots** – input `runner_roots` (comma‑separated absolute paths, e.g., `/home/runner/_work,/mnt/data/_work`). The action refuses to run if the list is empty or contains relative paths.
+3. **Target roots** – trusted constants in the reusable workflow; callers cannot widen the deletion scope. The script still requires and validates comma-separated absolute roots for direct operator use and tests.
 4. **Safe-to-delete patterns** – only `node_modules`, `.cache`, `.parcel-cache`, `.turbo`, `.next/cache`, `coverage`, `target`, `dist`, and `build` below repository workspaces under `<runner-root>/_work/<repo>/<repo>/`. Source checkouts, `_actions`, `_tool`, `_diag`, package-manager home caches, active webroots, and paths outside configured roots are never candidates.
 5. **Reclaimed bytes report** – the action walks the eligible trees, sums sizes, and prints a line `[janitor] reclaimed <N> bytes` for each deletion. A summary job output `total_bytes_reclaimed` is set. In dry‑run mode, the log states `[janitor] dry-run would reclaim <N> bytes`.
 
@@ -77,7 +77,7 @@ A separate reusable workflow (`runner-workdir-janitor.yml`) and shell helper. Be
 - All scripts use `set -euo pipefail` and handle missing commands gracefully.
 - The janitor’s process detection uses an exact executable/command-line probe for `Runner.Worker` that does not match its own grep/probe command. If `pgrep` is unavailable, it examines `/proc/*/cmdline` on Linux; otherwise it exits conservatively.
 - Symlinks: the janitor never follows symlinks when deleting; it resolves real paths first and verifies they remain within `runner_roots`.
-- The webroot retention script uses `flock` on a lockfile to prevent concurrent pruning.
+- The webroot retention script atomically creates a per-webroot lock directory to prevent concurrent pruning, using only portable filesystem primitives.
 - The preflight check respects the `ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION` and other known edge cases by parsing `df` output in POSIX‑defined unit‑based mode (`df -P`).
 - Exclusions during publish‑artifact creation are precise: the script only excludes directories, not files that happen to share a name (unless explicitly blacklisted files like `yarn.lock` under `node_modules`).
 

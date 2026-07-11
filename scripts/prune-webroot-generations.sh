@@ -15,6 +15,14 @@ if ! [[ "$retain" =~ ^[0-9]+$ ]] || (( retain < 1 )); then
 fi
 [[ -d "$parent" && ! -L "$parent" ]] || { echo "[prune-webroot] unsafe parent: $parent" >&2; exit 2; }
 
+lock_dir="$parent/.${webroot}.prune.lock"
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  echo "[prune-webroot] another prune is active for $webroot" >&2
+  exit 3
+fi
+cleanup_lock() { rmdir "$lock_dir" 2>/dev/null || true; }
+trap cleanup_lock EXIT
+
 records=()
 for candidate in "$parent/$webroot.old."*; do
   [[ -e "$candidate" || -L "$candidate" ]] || continue

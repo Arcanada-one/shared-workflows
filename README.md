@@ -85,7 +85,6 @@ jobs:
   dry-run:
     uses: Arcanada-one/shared-workflows/.github/workflows/runner-workdir-janitor.yml@v1
     with:
-      runner_roots: /opt/actions-runner-arcanada,/opt/actions-runner-angryrobotdeals
       dry_run: true
 ```
 
