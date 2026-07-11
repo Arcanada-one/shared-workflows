@@ -1,0 +1,40 @@
+name: runner-workdir-janitor
+
+on:
+  workflow_call:
+    inputs:
+      runner_roots:
+        description: Comma-separated absolute runner installation roots.
+        required: true
+        type: string
+      dry_run:
+        description: Report candidates without deleting them.
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  janitor:
+    runs-on: [self-hosted, linux, arcana-www, sites]
+    steps:
+      - name: Checkout trusted janitor implementation
+        uses: actions/checkout@v4
+        with:
+          repository: Arcanada-one/shared-workflows
+          ref: v1
+          path: .janitor-controls
+
+      - name: Clean idle runner workdirs
+        env:
+          RUNNER_ROOTS: ${{ inputs.runner_roots }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          JANITOR_REPORT: ${{ runner.temp }}/runner-janitor-report.txt
+        run: bash .janitor-controls/scripts/runner-workdir-janitor.sh
+
+      - name: Upload janitor report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-workdir-janitor-report
+          path: ${{ runner.temp }}/runner-janitor-report.txt
+          if-no-files-found: warn
