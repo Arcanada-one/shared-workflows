@@ -268,7 +268,9 @@ jobs:
             exit 1
           fi
           zone="$(printf '%s' "${zones_resp}" \
-            | grep -o '"id":"[0-9a-f]\{32\}"' | head -1 | cut -d'"' -f4 || true)"
+            | tr -d '\r\n' \
+            | grep -Eo '"id"[[:space:]]*:[[:space:]]*"[0-9a-f]{32}"' \
+            | head -1 | grep -Eo '[0-9a-f]{32}' || true)"
           if [ -z "${zone}" ]; then
             echo "NOTE: ${DOMAIN} is not a Cloudflare zone — skipping purge."
             exit 0

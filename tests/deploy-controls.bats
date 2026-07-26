@@ -35,8 +35,8 @@ setup_cloudflare_fixture() {
   cat > "$CF_BIN/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "$*" >> "$CURL_LOG"
 if [[ "$*" == *"/purge_cache"* ]]; then
+  printf '%s\n' purge >> "$CURL_LOG"
   case "$CURL_SCENARIO" in
     purge-http-error)
       if [[ "$*" == *"-fsS"* ]]; then
@@ -48,6 +48,9 @@ if [[ "$*" == *"/purge_cache"* ]]; then
     purge-api-error)
       printf '%s\n' '{"success":false,"errors":[{"message":"SENSITIVE_PURGE_API_BODY"}]}'
       ;;
+    noncompact-success)
+      printf '%s\n' '{"success" : true}'
+      ;;
     *)
       echo "unexpected purge scenario: $CURL_SCENARIO" >&2
       exit 64
@@ -56,19 +59,31 @@ if [[ "$*" == *"/purge_cache"* ]]; then
   exit 0
 fi
 
+printf '%s\n' lookup >> "$CURL_LOG"
 case "$CURL_SCENARIO" in
   empty-zone)
     printf '%s\n' '{"success":true,"result":[]}'
     ;;
   auth-error)
-    echo 'curl: (22) The requested URL returned error: 401' >&2
-    exit 22
+    if [[ "$*" == *"-fsS"* ]]; then
+      echo 'curl: (22) The requested URL returned error: 401' >&2
+      exit 22
+    fi
+    printf '%s\n' '{"success":false,"errors":[{"message":"SENSITIVE_LOOKUP_HTTP_BODY"}]}'
     ;;
   api-error)
-    printf '%s\n' '{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}'
+    printf '%s\n' '{"success":false,"errors":[{"code":10000,"message":"SENSITIVE_LOOKUP_API_BODY"}]}'
     ;;
   purge-http-error|purge-api-error)
     printf '%s\n' '{"success":true,"result":[{"id":"0123456789abcdef0123456789abcdef"}]}'
+    ;;
+  noncompact-success)
+    printf '%s\n' '{
+      "success" : true,
+      "result" : [
+        { "id" : "0123456789abcdef0123456789abcdef" }
+      ]
+    }'
     ;;
   *)
     echo "unexpected curl scenario: $CURL_SCENARIO" >&2
@@ -87,6 +102,11 @@ run_cloudflare_step() {
     CURL_LOG="$CURL_LOG" \
     PATH="$CF_BIN:$PATH" \
     bash "$CF_SCRIPT"
+}
+
+assert_cloudflare_outputs_redacted() {
+  [[ "$output" != *"synthetic-test-token"* ]] \
+    && ! grep -qF "synthetic-test-token" "$CURL_LOG"
 }
 
 @test "publish sync excludes dependencies and caches but retains build output" {
@@ -168,7 +188,8 @@ run_cloudflare_step() {
 @test "Cloudflare empty zone lookup skips purge successfully with an explicit note" {
   setup_cloudflare_fixture
   run_cloudflare_step empty-zone
-  [ "$status" -eq 0 ] \
+  assert_cloudflare_outputs_redacted \
+    && [ "$status" -eq 0 ] \
     && [[ "$output" == *"NOTE: example.com is not a Cloudflare zone — skipping purge."* ]] \
     && [ "$(wc -l < "$CURL_LOG")" -eq 1 ]
 }
@@ -176,21 +197,26 @@ run_cloudflare_step() {
 @test "Cloudflare authentication error remains a hard failure" {
   setup_cloudflare_fixture
   run_cloudflare_step auth-error
-  [ "$status" -ne 0 ] \
+  assert_cloudflare_outputs_redacted \
+    && [[ "$output" != *"SENSITIVE_LOOKUP_HTTP_BODY"* ]] \
+    && [ "$status" -ne 0 ] \
     && [[ "$output" == *"requested URL returned error: 401"* ]]
 }
 
 @test "Cloudflare API error remains a hard failure" {
   setup_cloudflare_fixture
   run_cloudflare_step api-error
-  [ "$status" -ne 0 ] \
+  assert_cloudflare_outputs_redacted \
+    && [[ "$output" != *"SENSITIVE_LOOKUP_API_BODY"* ]] \
+    && [ "$status" -ne 0 ] \
     && [[ "$output" == *"Cloudflare zone lookup did not report success"* ]]
 }
 
 @test "Cloudflare purge HTTP error remains a hard failure without response-body logging" {
   setup_cloudflare_fixture
   run_cloudflare_step purge-http-error
-  [[ "$output" != *"SENSITIVE_PURGE_HTTP_BODY"* ]] \
+  assert_cloudflare_outputs_redacted \
+    && [[ "$output" != *"SENSITIVE_PURGE_HTTP_BODY"* ]] \
     && [ "$status" -ne 0 ] \
     && [[ "$output" == *"requested URL returned error: 500"* ]] \
     && [ "$(wc -l < "$CURL_LOG")" -eq 2 ]
@@ -199,8 +225,18 @@ run_cloudflare_step() {
 @test "Cloudflare purge API error remains a hard failure without response-body logging" {
   setup_cloudflare_fixture
   run_cloudflare_step purge-api-error
-  [[ "$output" != *"SENSITIVE_PURGE_API_BODY"* ]] \
+  assert_cloudflare_outputs_redacted \
+    && [[ "$output" != *"SENSITIVE_PURGE_API_BODY"* ]] \
     && [ "$status" -ne 0 ] \
     && [[ "$output" == *"Cloudflare cache purge did not report success"* ]] \
+    && [ "$(wc -l < "$CURL_LOG")" -eq 2 ]
+}
+
+@test "Cloudflare non-compact zone JSON resolves the zone and purges successfully" {
+  setup_cloudflare_fixture
+  run_cloudflare_step noncompact-success
+  assert_cloudflare_outputs_redacted \
+    && [ "$status" -eq 0 ] \
+    && [[ "$output" == *"Cloudflare cache purged (purge_everything)."* ]] \
     && [ "$(wc -l < "$CURL_LOG")" -eq 2 ]
 }
