@@ -18,6 +18,54 @@ setup() {
   printf ref > "$BATS_TEST_TMPDIR/source/.git/HEAD"
 }
 
+setup_cloudflare_fixture() {
+  WORKFLOW="$BATS_TEST_DIRNAME/../.github/workflows/deploy-static-site.yml"
+  CF_SCRIPT="$BATS_TEST_TMPDIR/cloudflare-purge.sh"
+  CF_BIN="$BATS_TEST_TMPDIR/bin"
+  CURL_LOG="$BATS_TEST_TMPDIR/curl.log"
+  mkdir -p "$CF_BIN"
+
+  awk '
+    /^      - name: Cloudflare cache purge / { in_step = 1; next }
+    in_step && /^        run: \|$/ { in_run = 1; next }
+    in_run && /^      - name:/ { exit }
+    in_run { sub(/^          /, ""); print }
+  ' "$WORKFLOW" > "$CF_SCRIPT"
+
+  cat > "$CF_BIN/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$CURL_LOG"
+case "$CURL_SCENARIO" in
+  empty-zone)
+    printf '%s\n' '{"success":true,"result":[]}'
+    ;;
+  auth-error)
+    echo 'curl: (22) The requested URL returned error: 401' >&2
+    exit 22
+    ;;
+  api-error)
+    printf '%s\n' '{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}'
+    ;;
+  *)
+    echo "unexpected curl scenario: $CURL_SCENARIO" >&2
+    exit 64
+    ;;
+esac
+EOF
+  chmod +x "$CF_BIN/curl"
+}
+
+run_cloudflare_step() {
+  run env \
+    DOMAIN=example.com \
+    CF_API_TOKEN=synthetic-test-token \
+    CURL_SCENARIO="$1" \
+    CURL_LOG="$CURL_LOG" \
+    PATH="$CF_BIN:$PATH" \
+    bash "$CF_SCRIPT"
+}
+
 @test "publish sync excludes dependencies and caches but retains build output" {
   run bash "$SYNC_SCRIPT" "$BATS_TEST_TMPDIR/source" "$BATS_TEST_TMPDIR/dest"
   [ "$status" -eq 0 ] \
@@ -92,4 +140,26 @@ setup() {
 @test "janitor workflow restricts execution to the trusted private caller" {
   workflow="$BATS_TEST_DIRNAME/../.github/workflows/runner-workdir-janitor.yml"
   grep -qF "github.repository == 'Arcanada-one/datarim-club-site'" "$workflow"
+}
+
+@test "Cloudflare empty zone lookup skips purge successfully with an explicit note" {
+  setup_cloudflare_fixture
+  run_cloudflare_step empty-zone
+  [ "$status" -eq 0 ] \
+    && [[ "$output" == *"NOTE: example.com is not a Cloudflare zone — skipping purge."* ]] \
+    && [ "$(wc -l < "$CURL_LOG")" -eq 1 ]
+}
+
+@test "Cloudflare authentication error remains a hard failure" {
+  setup_cloudflare_fixture
+  run_cloudflare_step auth-error
+  [ "$status" -ne 0 ] \
+    && [[ "$output" == *"requested URL returned error: 401"* ]]
+}
+
+@test "Cloudflare API error remains a hard failure" {
+  setup_cloudflare_fixture
+  run_cloudflare_step api-error
+  [ "$status" -ne 0 ] \
+    && [[ "$output" == *"Cloudflare zone lookup did not report success"* ]]
 }

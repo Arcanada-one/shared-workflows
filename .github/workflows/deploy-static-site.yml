@@ -260,12 +260,17 @@ jobs:
             echo "NOTE: CF_API_TOKEN secret not set — skipping Cloudflare cache purge (edge self-expires)."
             exit 0
           fi
-          zone="$(curl -s --max-time 20 \
+          zones_resp="$(curl -fsS --max-time 20 \
             "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}" \
-            -H "Authorization: Bearer ${CF_API_TOKEN}" \
-            | grep -o '"id":"[0-9a-f]\{32\}"' | head -1 | cut -d'"' -f4)"
+            -H "Authorization: Bearer ${CF_API_TOKEN}")"
+          if ! printf '%s' "${zones_resp}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
+            echo "::error::Cloudflare zone lookup did not report success." >&2
+            exit 1
+          fi
+          zone="$(printf '%s' "${zones_resp}" \
+            | grep -o '"id":"[0-9a-f]\{32\}"' | head -1 | cut -d'"' -f4 || true)"
           if [ -z "${zone}" ]; then
-            echo "NOTE: ${DOMAIN} is not a Cloudflare zone (or lookup failed) — skipping purge."
+            echo "NOTE: ${DOMAIN} is not a Cloudflare zone — skipping purge."
             exit 0
           fi
           echo "Purging Cloudflare cache for ${DOMAIN} (zone ${zone}) ..."
