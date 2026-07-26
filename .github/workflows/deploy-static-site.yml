@@ -260,25 +260,32 @@ jobs:
             echo "NOTE: CF_API_TOKEN secret not set — skipping Cloudflare cache purge (edge self-expires)."
             exit 0
           fi
-          zone="$(curl -s --max-time 20 \
+          zones_resp="$(curl -fsS --max-time 20 \
             "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}" \
-            -H "Authorization: Bearer ${CF_API_TOKEN}" \
-            | grep -o '"id":"[0-9a-f]\{32\}"' | head -1 | cut -d'"' -f4)"
+            -H "Authorization: Bearer ${CF_API_TOKEN}")"
+          if ! printf '%s' "${zones_resp}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
+            echo "::error::Cloudflare zone lookup did not report success." >&2
+            exit 1
+          fi
+          zone="$(printf '%s' "${zones_resp}" \
+            | tr -d '\r\n' \
+            | grep -Eo '"id"[[:space:]]*:[[:space:]]*"[0-9a-f]{32}"' \
+            | head -1 | grep -Eo '[0-9a-f]{32}' || true)"
           if [ -z "${zone}" ]; then
-            echo "NOTE: ${DOMAIN} is not a Cloudflare zone (or lookup failed) — skipping purge."
+            echo "NOTE: ${DOMAIN} is not a Cloudflare zone — skipping purge."
             exit 0
           fi
           echo "Purging Cloudflare cache for ${DOMAIN} (zone ${zone}) ..."
-          resp="$(curl -s --max-time 30 -X POST \
+          resp="$(curl -fsS --max-time 30 -X POST \
             "https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache" \
             -H "Authorization: Bearer ${CF_API_TOKEN}" \
             -H "Content-Type: application/json" \
             --data '{"purge_everything":true}')"
-          if echo "${resp}" | grep -q '"success":true'; then
+          if printf '%s' "${resp}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
             echo "Cloudflare cache purged (purge_everything)."
           else
-            echo "WARNING: Cloudflare purge did not report success — deploy still OK, edge self-expires." >&2
-            echo "${resp}" >&2
+            echo "::error::Cloudflare cache purge did not report success." >&2
+            exit 1
           fi
 
       - name: Notify Ops Bot on failure
