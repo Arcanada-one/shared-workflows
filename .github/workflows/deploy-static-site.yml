@@ -274,16 +274,16 @@ jobs:
             exit 0
           fi
           echo "Purging Cloudflare cache for ${DOMAIN} (zone ${zone}) ..."
-          resp="$(curl -s --max-time 30 -X POST \
+          resp="$(curl -fsS --max-time 30 -X POST \
             "https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache" \
             -H "Authorization: Bearer ${CF_API_TOKEN}" \
             -H "Content-Type: application/json" \
             --data '{"purge_everything":true}')"
-          if echo "${resp}" | grep -q '"success":true'; then
+          if printf '%s' "${resp}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
             echo "Cloudflare cache purged (purge_everything)."
           else
-            echo "WARNING: Cloudflare purge did not report success — deploy still OK, edge self-expires." >&2
-            echo "${resp}" >&2
+            echo "::error::Cloudflare cache purge did not report success." >&2
+            exit 1
           fi
 
       - name: Notify Ops Bot on failure

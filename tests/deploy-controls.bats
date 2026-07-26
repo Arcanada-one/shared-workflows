@@ -36,6 +36,26 @@ setup_cloudflare_fixture() {
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$CURL_LOG"
+if [[ "$*" == *"/purge_cache"* ]]; then
+  case "$CURL_SCENARIO" in
+    purge-http-error)
+      if [[ "$*" == *"-fsS"* ]]; then
+        echo 'curl: (22) The requested URL returned error: 500' >&2
+        exit 22
+      fi
+      printf '%s\n' '{"success":false,"errors":[{"message":"SENSITIVE_PURGE_HTTP_BODY"}]}'
+      ;;
+    purge-api-error)
+      printf '%s\n' '{"success":false,"errors":[{"message":"SENSITIVE_PURGE_API_BODY"}]}'
+      ;;
+    *)
+      echo "unexpected purge scenario: $CURL_SCENARIO" >&2
+      exit 64
+      ;;
+  esac
+  exit 0
+fi
+
 case "$CURL_SCENARIO" in
   empty-zone)
     printf '%s\n' '{"success":true,"result":[]}'
@@ -46,6 +66,9 @@ case "$CURL_SCENARIO" in
     ;;
   api-error)
     printf '%s\n' '{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}'
+    ;;
+  purge-http-error|purge-api-error)
+    printf '%s\n' '{"success":true,"result":[{"id":"0123456789abcdef0123456789abcdef"}]}'
     ;;
   *)
     echo "unexpected curl scenario: $CURL_SCENARIO" >&2
@@ -162,4 +185,22 @@ run_cloudflare_step() {
   run_cloudflare_step api-error
   [ "$status" -ne 0 ] \
     && [[ "$output" == *"Cloudflare zone lookup did not report success"* ]]
+}
+
+@test "Cloudflare purge HTTP error remains a hard failure without response-body logging" {
+  setup_cloudflare_fixture
+  run_cloudflare_step purge-http-error
+  [[ "$output" != *"SENSITIVE_PURGE_HTTP_BODY"* ]] \
+    && [ "$status" -ne 0 ] \
+    && [[ "$output" == *"requested URL returned error: 500"* ]] \
+    && [ "$(wc -l < "$CURL_LOG")" -eq 2 ]
+}
+
+@test "Cloudflare purge API error remains a hard failure without response-body logging" {
+  setup_cloudflare_fixture
+  run_cloudflare_step purge-api-error
+  [[ "$output" != *"SENSITIVE_PURGE_API_BODY"* ]] \
+    && [ "$status" -ne 0 ] \
+    && [[ "$output" == *"Cloudflare cache purge did not report success"* ]] \
+    && [ "$(wc -l < "$CURL_LOG")" -eq 2 ]
 }
