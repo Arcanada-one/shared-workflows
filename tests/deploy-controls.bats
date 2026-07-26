@@ -185,6 +185,26 @@ assert_cloudflare_outputs_redacted() {
   grep -qF "github.repository == 'Arcanada-one/datarim-club-site'" "$workflow"
 }
 
+@test "reusable workflows pin actions and bind control checkouts to their exact revision" {
+  deploy="$BATS_TEST_DIRNAME/../.github/workflows/deploy-static-site.yml"
+  janitor="$BATS_TEST_DIRNAME/../.github/workflows/runner-workdir-janitor.yml"
+
+  ! grep -Eq 'uses: [^[:space:]]+@v[0-9]+' "$deploy" \
+    && ! grep -Eq 'uses: [^[:space:]]+@v[0-9]+' "$janitor" \
+    && ! grep -Eq '^[[:space:]]+ref: v[0-9]+' "$deploy" \
+    && ! grep -Eq '^[[:space:]]+ref: v[0-9]+' "$janitor" \
+    && grep -qF 'ref: ${{ github.workflow_sha }}' "$deploy" \
+    && grep -qF 'ref: ${{ github.workflow_sha }}' "$janitor"
+}
+
+@test "reusable workflows explicitly restrict their token to read-only contents" {
+  deploy="$BATS_TEST_DIRNAME/../.github/workflows/deploy-static-site.yml"
+  janitor="$BATS_TEST_DIRNAME/../.github/workflows/runner-workdir-janitor.yml"
+
+  grep -A1 '^permissions:$' "$deploy" | grep -qF 'contents: read' \
+    && grep -A1 '^permissions:$' "$janitor" | grep -qF 'contents: read'
+}
+
 @test "Cloudflare empty zone lookup skips purge successfully with an explicit note" {
   setup_cloudflare_fixture
   run_cloudflare_step empty-zone

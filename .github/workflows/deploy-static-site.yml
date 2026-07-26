@@ -62,6 +62,9 @@ on:
         description: Ops Bot bearer token for failure notifications. Optional.
         required: false
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: [self-hosted, linux, arcana-www, sites]
@@ -72,13 +75,15 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout site content
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Checkout shared deployment controls
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: Arcanada-one/shared-workflows
-          ref: v1
+          # Bind helper scripts to the exact reusable-workflow revision selected
+          # by the caller; never float independently to a mutable major tag.
+          ref: ${{ github.workflow_sha }}
           path: .shared-workflows
 
       - name: Check disk capacity before build
@@ -90,7 +95,7 @@ jobs:
         # provisions Node into the runner toolcache on demand. Skipped entirely for
         # the static sites (no build input), so it costs nothing there.
         if: inputs.build != ''
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           # Default '20' keeps every current @v1 build consumer unchanged; build
           # sites on an older Angular pin an older Node via node_version (INFRA-0331).

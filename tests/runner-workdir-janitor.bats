@@ -19,9 +19,11 @@ setup() {
 }
 
 run_janitor() {
+  # Unit tests must not inherit a real Runner.Worker from the host running
+  # Bats; individual busy-state cases set an explicit synthetic PID.
   run env HOME="$BATS_TEST_TMPDIR/home" RUNNER_ROOTS="$ROOT" \
     JANITOR_REPORT="$REPORT" GITHUB_OUTPUT="$OUTPUT_FILE" \
-    RUNNER_WORKER_PIDS_OVERRIDE="${RUNNER_WORKER_PIDS_OVERRIDE:-}" \
+    RUNNER_WORKER_PIDS_OVERRIDE="${RUNNER_WORKER_PIDS_OVERRIDE:-none}" \
     SELF_RUNNER_WORKER_PID_OVERRIDE="${SELF_RUNNER_WORKER_PID_OVERRIDE:-}" \
     DRY_RUN="${DRY_RUN:-true}" bash "$SCRIPT"
 }
