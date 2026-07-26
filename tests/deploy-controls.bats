@@ -189,12 +189,22 @@ assert_cloudflare_outputs_redacted() {
   deploy="$BATS_TEST_DIRNAME/../.github/workflows/deploy-static-site.yml"
   janitor="$BATS_TEST_DIRNAME/../.github/workflows/runner-workdir-janitor.yml"
 
-  ! grep -Eq 'uses: [^[:space:]]+@v[0-9]+' "$deploy" \
-    && ! grep -Eq 'uses: [^[:space:]]+@v[0-9]+' "$janitor" \
-    && ! grep -Eq '^[[:space:]]+ref: v[0-9]+' "$deploy" \
-    && ! grep -Eq '^[[:space:]]+ref: v[0-9]+' "$janitor" \
-    && grep -qF 'ref: ${{ github.workflow_sha }}' "$deploy" \
-    && grep -qF 'ref: ${{ github.workflow_sha }}' "$janitor"
+  for workflow in "$deploy" "$janitor"; do
+    while IFS= read -r action; do
+      [[ "$action" =~ ^[^@[:space:]]+@[0-9a-f]{40}$ ]] || return 1
+    done < <(
+      sed 's/[[:space:]]*#.*$//' "$workflow" |
+        sed -n 's/^[[:space:]]*uses:[[:space:]]*//p'
+    )
+
+    mapfile -t refs < <(
+      sed 's/[[:space:]]*#.*$//' "$workflow" |
+        sed -n 's/^[[:space:]]*ref:[[:space:]]*//p'
+    )
+    [ "${#refs[@]}" -eq 1 ] \
+      && [ "${refs[0]}" = '${{ job.workflow_sha }}' ] \
+      && grep -qF 'repository: ${{ job.workflow_repository }}' "$workflow"
+  done
 }
 
 @test "reusable workflows explicitly restrict their token to read-only contents" {

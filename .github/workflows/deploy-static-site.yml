@@ -80,10 +80,10 @@ jobs:
       - name: Checkout shared deployment controls
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          repository: Arcanada-one/shared-workflows
+          repository: ${{ job.workflow_repository }}
           # Bind helper scripts to the exact reusable-workflow revision selected
           # by the caller; never float independently to a mutable major tag.
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ job.workflow_sha }}
           path: .shared-workflows
 
       - name: Check disk capacity before build
@@ -234,7 +234,9 @@ jobs:
             # a controlled glob, but find keeps it robust.
             prev="$(find /var/www -maxdepth 1 -type d -name "$(basename "${dst}").old.*" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)"
             if [ -n "${prev}" ] && [ -d "${prev}" ]; then
-              [ -d "${dst}" ] && mv "${dst}" "${dst}.broken.$(date +%s 2>/dev/null || echo x)" 2>/dev/null || true
+              if [ -d "${dst}" ]; then
+                mv "${dst}" "${dst}.broken.$(date +%s 2>/dev/null || echo x)" 2>/dev/null || true
+              fi
               mv "${prev}" "${dst}"
             fi
             exit 1

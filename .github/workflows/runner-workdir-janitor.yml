@@ -30,9 +30,9 @@ jobs:
       - name: Checkout trusted janitor implementation
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          repository: Arcanada-one/shared-workflows
+          repository: ${{ job.workflow_repository }}
           # Keep the implementation at the exact reusable-workflow revision.
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ job.workflow_sha }}
           path: .janitor-controls
 
       - name: Clean idle runner workdirs
