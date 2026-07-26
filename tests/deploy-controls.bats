@@ -185,6 +185,42 @@ assert_cloudflare_outputs_redacted() {
   grep -qF "github.repository == 'Arcanada-one/datarim-club-site'" "$workflow"
 }
 
+@test "reusable workflows pin actions and bind control checkouts to their exact revision" {
+  deploy="$BATS_TEST_DIRNAME/../.github/workflows/deploy-static-site.yml"
+  janitor="$BATS_TEST_DIRNAME/../.github/workflows/runner-workdir-janitor.yml"
+
+  for workflow in "$deploy" "$janitor"; do
+    while IFS= read -r action; do
+      [[ "$action" =~ ^[^@[:space:]]+@[0-9a-f]{40}$ ]] || return 1
+    done < <(
+      sed 's/[[:space:]]*#.*$//' "$workflow" |
+        sed -n 's/^[[:space:]]*uses:[[:space:]]*//p'
+    )
+
+    mapfile -t refs < <(
+      sed 's/[[:space:]]*#.*$//' "$workflow" |
+        sed -n 's/^[[:space:]]*ref:[[:space:]]*//p'
+    )
+    [ "${#refs[@]}" -eq 1 ] || return 1
+    [ "${refs[0]}" = '${{ job.workflow_sha }}' ] || return 1
+
+    mapfile -t repositories < <(
+      sed 's/[[:space:]]*#.*$//' "$workflow" |
+        sed -n 's/^[[:space:]]*repository:[[:space:]]*//p'
+    )
+    [ "${#repositories[@]}" -eq 1 ] || return 1
+    [ "${repositories[0]}" = '${{ job.workflow_repository }}' ] || return 1
+  done
+}
+
+@test "reusable workflows explicitly restrict their token to read-only contents" {
+  deploy="$BATS_TEST_DIRNAME/../.github/workflows/deploy-static-site.yml"
+  janitor="$BATS_TEST_DIRNAME/../.github/workflows/runner-workdir-janitor.yml"
+
+  grep -A1 '^permissions:$' "$deploy" | grep -qF 'contents: read' \
+    && grep -A1 '^permissions:$' "$janitor" | grep -qF 'contents: read'
+}
+
 @test "Cloudflare empty zone lookup skips purge successfully with an explicit note" {
   setup_cloudflare_fixture
   run_cloudflare_step empty-zone
