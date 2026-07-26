@@ -201,9 +201,15 @@ assert_cloudflare_outputs_redacted() {
       sed 's/[[:space:]]*#.*$//' "$workflow" |
         sed -n 's/^[[:space:]]*ref:[[:space:]]*//p'
     )
-    [ "${#refs[@]}" -eq 1 ] \
-      && [ "${refs[0]}" = '${{ job.workflow_sha }}' ] \
-      && grep -qF 'repository: ${{ job.workflow_repository }}' "$workflow"
+    [ "${#refs[@]}" -eq 1 ] || return 1
+    [ "${refs[0]}" = '${{ job.workflow_sha }}' ] || return 1
+
+    mapfile -t repositories < <(
+      sed 's/[[:space:]]*#.*$//' "$workflow" |
+        sed -n 's/^[[:space:]]*repository:[[:space:]]*//p'
+    )
+    [ "${#repositories[@]}" -eq 1 ] || return 1
+    [ "${repositories[0]}" = '${{ job.workflow_repository }}' ] || return 1
   done
 }
 
