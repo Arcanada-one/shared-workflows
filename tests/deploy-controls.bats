@@ -180,6 +180,18 @@ assert_cloudflare_outputs_redacted() {
     && [ "$prune_line" -gt "$health_line" ]
 }
 
+@test "generated build stamp is guarded against direct web execution" {
+  publish="$BATS_TEST_TMPDIR/publish"
+  mkdir -p "$publish"
+
+  run bash -c "cd \"$BATS_TEST_TMPDIR\" && bash \"$BATS_TEST_DIRNAME/../scripts/write-build-info.sh\" publish deadbeef"
+  [ "$status" -eq 0 ]
+  [ -f "$publish/build-info.php" ]
+  grep -qF "PHP_SAPI !== 'cli'" "$publish/build-info.php"
+  grep -qF "http_response_code(404)" "$publish/build-info.php"
+  grep -qF "build_sha" "$publish/build-info.php"
+}
+
 @test "janitor workflow restricts execution to the trusted private caller" {
   workflow="$BATS_TEST_DIRNAME/../.github/workflows/runner-workdir-janitor.yml"
   grep -qF "github.repository == 'Arcanada-one/datarim-club-site'" "$workflow"
