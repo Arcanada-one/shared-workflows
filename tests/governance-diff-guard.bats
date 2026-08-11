@@ -5,7 +5,7 @@
 # guard FAILS when the justification is missing.
 
 setup() {
-  GUARD="${BATS_TEST_DIRNAME}/../scripts/governance-diff-guard.sh"
+  GUARD="${BATS_TEST_DIRNAME}/../.github/actions/governance-diff-guard/governance-diff-guard.sh"
   TMP="$(mktemp -d)"
   BODY_PLAIN="${TMP}/body-plain"
   BODY_OK="${TMP}/body-ok"
