@@ -95,7 +95,7 @@ jobs:
         # provisions Node into the runner toolcache on demand. Skipped entirely for
         # the static sites (no build input), so it costs nothing there.
         if: inputs.build != ''
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # Default '20' keeps every current @v1 build consumer unchanged; build
           # sites on an older Angular pin an older Node via node_version (INFRA-0331).
