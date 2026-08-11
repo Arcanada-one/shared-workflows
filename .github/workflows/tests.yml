@@ -1,0 +1,48 @@
+name: tests
+
+# Runs every bats suite under tests/ by GLOB, deliberately not by an enumerated
+# list. A named list silently skips any suite added later, which leaves the repo
+# green while new tests run nowhere — this repo already had three suites that no
+# workflow executed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bats:
+    name: bats
+    runs-on: [self-hosted, linux, arcana-ai, docker, ci-general]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Discover suites
+        id: find
+        run: |
+          set -euo pipefail
+          mapfile -t suites < <(find tests -name '*.bats' -type f | sort)
+          if [ "${#suites[@]}" -eq 0 ]; then
+            echo "::error::no bats suites found under tests/ — expected at least one"
+            exit 1
+          fi
+          printf 'found %s suite(s):\n' "${#suites[@]}"
+          printf '  %s\n' "${suites[@]}"
+
+      - name: Run suites
+        run: |
+          set -euo pipefail
+          if command -v bats >/dev/null 2>&1; then
+            bats tests/
+          else
+            # The runner fleet is heterogeneous; fall back to the pinned image
+            # rather than assuming host tooling exists.
+            docker run --rm -v "$PWD:/code" -w /code \
+              bats/bats:1.11.0@sha256:e8f18e0acd4ea933bf019130b85033be75e8ce081db299e93578de83d7874e33 \
+              tests/
+          fi
