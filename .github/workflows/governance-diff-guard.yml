@@ -36,11 +36,12 @@ permissions:
 jobs:
   guard:
     name: governance-diff-guard
-    # Literal, not an expression: an expression-computed runs-on did not
-    # schedule against the self-hosted pool — the job reported the correct
-    # labels via the API but sat queued indefinitely while sibling jobs with
-    # literal labels ran normally (SEC-0039).
-    runs-on: [self-hosted, linux, arcana-ai, docker, ci-general]
+    # GitHub-hosted. Public repos get free unlimited hosted minutes, and the
+    # org's single self-hosted ci-general runner is permanently contended —
+    # targeting it made this guard sit queued indefinitely and never run at all
+    # (SEC-0039). Private-repo callers need a self-hosted override, since the
+    # org's PAID hosted minutes are exhausted.
+    runs-on: ubuntu-latest
     steps:
       # The implementation is checked out from this trusted repo, never from the
       # pull request under inspection — a PR must not be able to edit its own guard.
