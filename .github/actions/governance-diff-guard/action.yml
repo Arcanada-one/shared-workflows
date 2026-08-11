@@ -1,0 +1,54 @@
+name: governance-diff-guard
+description: >-
+  Fail a pull request that touches a governance path unless its body carries an
+  explicit justification line.
+
+# Packaged as a composite action rather than a reusable workflow on purpose.
+# The reusable-workflow version had to check the implementation out by hand, and
+# `github.workflow_sha` resolves to the CALLER's commit — which does not exist in
+# this repository, so the checkout died with git exit 128 and the guard silently
+# skipped its own evaluation step while reporting failure for an unrelated reason
+# (SEC-0039). A composite action is checked out by GitHub automatically and
+# `$GITHUB_ACTION_PATH` points at it, so the script that runs is exactly the one
+# the caller pinned by SHA. No checkout, no drift, no token.
+
+inputs:
+  extra-patterns:
+    description: Newline-separated extra globs to treat as governance paths.
+    required: false
+    default: ""
+  github-token:
+    description: Token used to read the pull request's files and body.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Evaluate changed paths
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        EXTRA: ${{ inputs.extra-patterns }}
+      run: |
+        set -euo pipefail
+        if [ -z "${PR:-}" ] || [ "${PR}" = "null" ]; then
+          echo "governance-diff-guard: not a pull request; nothing to inspect."
+          exit 0
+        fi
+
+        gh api --paginate "repos/${REPO}/pulls/${PR}/files?per_page=100" \
+          --jq '.[].filename' > "${RUNNER_TEMP}/changed.txt"
+        echo "changed files: $(wc -l < "${RUNNER_TEMP}/changed.txt")"
+
+        gh api "repos/${REPO}/pulls/${PR}" --jq '.body // ""' > "${RUNNER_TEMP}/body.txt"
+
+        args=(--files "${RUNNER_TEMP}/changed.txt" --body "${RUNNER_TEMP}/body.txt")
+        if [ -n "${EXTRA//[[:space:]]/}" ]; then
+          printf '%s\n' "$EXTRA" > "${RUNNER_TEMP}/extra-patterns.txt"
+          args+=(--patterns "${RUNNER_TEMP}/extra-patterns.txt")
+        fi
+
+        bash "${GITHUB_ACTION_PATH}/governance-diff-guard.sh" "${args[@]}"
