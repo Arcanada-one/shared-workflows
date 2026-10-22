@@ -35,13 +35,13 @@ on:
         default: "."
       node_version:
         description: >-
-          Node.js version for the optional build step. Default '20' preserves the
-          behaviour of every existing @v1 consumer. Build sites that need an older
-          toolchain override it (e.g. Angular 13 needs Node 16; Node 20 = engine
-          fail). Only consulted when `build` is non-empty.
+          Node.js version for the optional build step. Default '24.22.1' is the
+          patched Node.js 24 build from the October 2026 security release (EOL
+          lines 18 and 20 received no fix). Callers that need another toolchain
+          override this input. Only consulted when `build` is non-empty.
         required: false
         type: string
-        default: "20"
+        default: "24.22.1"
       health_scheme:
         description: Scheme for the post-deploy health probe (http or https).
         required: false
@@ -97,8 +97,9 @@ jobs:
         if: inputs.build != ''
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          # Default '20' keeps every current @v1 build consumer unchanged; build
-          # sites on an older Angular pin an older Node via node_version (INFRA-0331).
+          # Default 24.22.1 is the patched Node 24 build (October 2026 security
+          # release). Callers override node_version when a site needs another
+          # toolchain (INFRA-0331).
           node-version: ${{ inputs.node_version }}
 
       - name: Optional build step
