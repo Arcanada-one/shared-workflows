@@ -24,6 +24,7 @@ concurrency:
 
 jobs:
   bats:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: bats
     runs-on: [self-hosted, linux, arcana-ai, docker, ci-general]
     steps:
