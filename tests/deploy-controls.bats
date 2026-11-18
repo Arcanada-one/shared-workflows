@@ -288,3 +288,32 @@ assert_cloudflare_outputs_redacted() {
     && [[ "$output" == *"Cloudflare cache purged (purge_everything)."* ]] \
     && [ "$(wc -l < "$CURL_LOG")" -eq 2 ]
 }
+
+@test "Cloudflare required mode fails closed when CF_API_TOKEN is unset (issue #9)" {
+  setup_cloudflare_fixture
+  run env \
+    DOMAIN=example.com \
+    CF_API_TOKEN= \
+    CLOUDFLARE_PURGE_MODE=required \
+    CURL_SCENARIO=empty-zone \
+    CURL_LOG="$CURL_LOG" \
+    PATH="$CF_BIN:$PATH" \
+    bash "$CF_SCRIPT"
+  [ "$status" -ne 0 ] \
+    && [[ "$output" == *"CF_API_TOKEN"* ]] \
+    && [[ "$output" == *"required"* || "$output" == *"not set"* || "$output" == *"forward"* ]]
+}
+
+@test "Cloudflare optional mode still skips when CF_API_TOKEN is unset" {
+  setup_cloudflare_fixture
+  run env \
+    DOMAIN=example.com \
+    CF_API_TOKEN= \
+    CLOUDFLARE_PURGE_MODE=optional \
+    CURL_SCENARIO=empty-zone \
+    CURL_LOG="$CURL_LOG" \
+    PATH="$CF_BIN:$PATH" \
+    bash "$CF_SCRIPT"
+  [ "$status" -eq 0 ] \
+    && [[ "$output" == *"skipping Cloudflare cache purge"* ]]
+}

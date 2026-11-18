@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **fix(deploy-static-site):** Cloudflare purge no longer hides a missing
+  `CF_API_TOKEN` behind a green deploy. New input `cloudflare_purge` defaults to
+  `required` (fail closed when the secret is not forwarded); `optional` keeps the
+  legacy skip; `off` disables purge. Callers must pass `secrets.CF_API_TOKEN`.
+  Rotating a dead org token remains an operator step (shared-workflows#9).
+
 ## v1.3 — 2026-07-11
 
 - **fix(deploy-static-site):** warn at 80% disk usage and stop before build at
