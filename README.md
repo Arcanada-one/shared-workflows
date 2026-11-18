@@ -35,13 +35,21 @@ rendering the deployed SHA and the ecosystem drift detector still works after a
 site moves off `deploy.sh` to gh-actions. The file is regenerated every deploy;
 keep it gitignored in the site repo.
 
-**Cloudflare cache purge (opt-in).** After a green health check, if the
-`CF_API_TOKEN` secret is provisioned on the runner/org, the workflow purges the
+**Cloudflare cache purge.** After a green health check the workflow purges the
 deployed domain's CF zone (`purge_everything`) so direct links reflect the deploy
-immediately. Fail-soft and skipped entirely when the secret is unset or the domain
-is not a CF zone — the deploy already succeeded and the edge cache self-expires,
-so migration is never blocked on the secret. Grant the secret a token scoped to
-`Cache Purge:Purge` only.
+immediately. Input `cloudflare_purge` (default `required`):
+
+- `required` — missing `CF_API_TOKEN` fails the job. Callers **must** forward
+  `secrets.CF_API_TOKEN` (explicit map or `secrets: inherit`). This closes the
+  failure mode where a green deploy silently skipped purge because the secret
+  was never mapped (shared-workflows#9).
+- `optional` — legacy fail-soft skip when the secret is unset.
+- `off` — skip purge entirely.
+
+A domain that is not a CF zone is still skipped with a note (even in `required`
+mode). Grant the token `Zone.Zone:Read` and `Cache Purge:Purge`. A 403 on zone
+lookup means the stored token is dead — rotate it; code cannot invent a live
+credential.
 
 The post-deploy health check follows redirects (`curl -L`) and accepts any
 final `2xx`: a site whose `/` issues a language/canonical redirect
@@ -60,6 +68,9 @@ jobs:
     with:
       domain: cubrim.com
       webroot: cubrim.com
+      # cloudflare_purge: required  # default
+    secrets:
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 ```
 
 Origin: INFRA-0302 (parent INFRA-0299).

@@ -47,13 +47,22 @@ on:
         required: false
         type: string
         default: http
+      cloudflare_purge:
+        description: >
+          Post-deploy Cloudflare cache purge mode. `required` (default) fails the
+          job when CF_API_TOKEN is not forwarded — callers must pass
+          `secrets.CF_API_TOKEN` (or inherit it). `optional` keeps the legacy
+          fail-soft skip when the secret is absent. `off` skips purge entirely.
+        required: false
+        type: string
+        default: required
     secrets:
-      # Declared optional so a caller MAY pass them explicitly; `secrets: inherit`
-      # in the caller also satisfies these. Both the CF cache purge and the Ops Bot
-      # notification are opt-in and fail-soft when the corresponding secret is
-      # absent, so a caller that provides none still deploys green.
+      # Declared optional at the secrets: schema level so callers can use
+      # `secrets: inherit` or an explicit map. With cloudflare_purge=required
+      # (the default), a missing CF_API_TOKEN fails the purge step — callers must
+      # forward it. Ops Bot notification remains fail-soft when absent.
       CF_API_TOKEN:
-        description: Cloudflare API token (Cache Purge:Purge) for the post-deploy cache purge. Optional.
+        description: Cloudflare API token (Zone.Zone:Read + Cache Purge:Purge) for the post-deploy cache purge. Required unless cloudflare_purge is optional/off.
         required: false
       OPSBOT_URL:
         description: Ops Bot events endpoint for failure notifications. Optional.
@@ -249,18 +258,38 @@ jobs:
         env:
           DOMAIN: ${{ inputs.domain }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_PURGE_MODE: ${{ inputs.cloudflare_purge }}
         run: |
           set -euo pipefail
           # Parity with Projects/Websites/deploy.sh Cloudflare purge: after the
           # origin is updated, Cloudflare keeps serving cached HTML until the edge
           # cache expires. Purge the deployed domain's zone so direct links reflect
-          # the deploy immediately. Opt-in and fail-soft, mirroring deploy.sh: if
-          # CF_API_TOKEN is unset (secret not provisioned on the runner/org), or
-          # the domain is not a CF zone, the purge is SKIPPED with a note — the
-          # deploy itself already succeeded and the edge cache self-expires. This
-          # keeps migration unblocked when the CF secret is not yet in place.
+          # the deploy immediately.
+          # Mode (input cloudflare_purge / CLOUDFLARE_PURGE_MODE):
+          #   required (default) — missing CF_API_TOKEN fails the job (issue #9:
+          #     callers that omit secrets: forwarding used to "succeed" while never
+          #     purging). Rotate a live Zone.Zone:Read + Cache Purge token separately.
+          #   optional — legacy fail-soft skip when the secret is unset.
+          #   off — skip purge entirely.
+          # Non-CF domains (empty zone list) still skip with a note in required/optional.
           # Runs only after a green health check (this step is unreached on rollback).
+          mode="${CLOUDFLARE_PURGE_MODE:-required}"
+          case "${mode}" in
+            required|optional|off) ;;
+            *)
+              echo "::error::cloudflare_purge must be required|optional|off (got '${mode}')." >&2
+              exit 1
+              ;;
+          esac
+          if [ "${mode}" = "off" ]; then
+            echo "NOTE: cloudflare_purge=off — skipping Cloudflare cache purge."
+            exit 0
+          fi
           if [ -z "${CF_API_TOKEN:-}" ]; then
+            if [ "${mode}" = "required" ]; then
+              echo "::error::CF_API_TOKEN is not set but cloudflare_purge=required. Forward secrets.CF_API_TOKEN from the caller (or use secrets: inherit). Do not hide a missing purge behind a green deploy." >&2
+              exit 1
+            fi
             echo "NOTE: CF_API_TOKEN secret not set — skipping Cloudflare cache purge (edge self-expires)."
             exit 0
           fi
