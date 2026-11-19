@@ -1,0 +1,27 @@
+name: isolate-pnpm-store
+description: >-
+  Point pnpm 11+ at a per-runner content-addressable store under this runner's
+  `_work/_pnpm-store`, so concurrent jobs that share one OS user do not contend
+  on `~/.local/share/pnpm/store/v11/index.db`.
+
+# Prefer this composite (or the matching systemd drop-in from
+# scripts/render-runner-pnpm-store-dropin.sh) over npm_config_store_dir: pnpm 11
+# ignores npm_config_store_dir and honors pnpm_config_store_dir (measured on
+# pnpm 11.20.0).
+
+runs:
+  using: composite
+  steps:
+    - name: Export per-runner pnpm_config_store_dir
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -z "${RUNNER_TEMP:-}" ]]; then
+          echo "::error::RUNNER_TEMP is required to derive the runner _work root" >&2
+          exit 1
+        fi
+        work_dir="$(dirname "$RUNNER_TEMP")"
+        store_dir="${work_dir}/_pnpm-store"
+        mkdir -p "$store_dir"
+        echo "pnpm_config_store_dir=${store_dir}" >> "$GITHUB_ENV"
+        echo "Isolated pnpm store: ${store_dir}"

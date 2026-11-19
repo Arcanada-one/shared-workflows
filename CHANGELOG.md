@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **fix(runners):** isolate pnpm 11+ stores per self-hosted runner so concurrent
+  jobs that share one OS user no longer contend on
+  `~/.local/share/pnpm/store/v11/index.db` (`ERR_PNPM_ERR_SQLITE_ERROR`). Adds
+  `scripts/render-runner-pnpm-store-dropin.sh` (systemd drop-in body),
+  `.github/actions/isolate-pnpm-store` (job-level `pnpm_config_store_dir`), and
+  Bats/assert coverage that locks `pnpm_config_store_dir` (not
+  `npm_config_store_dir`) as the working control. Does not apply drop-ins on
+  production hosts; Root/ops installs the rendered unit file.
 - **fix(deploy-static-site):** Cloudflare purge no longer hides a missing
   `CF_API_TOKEN` behind a green deploy. New input `cloudflare_purge` defaults to
   `required` (fail closed when the secret is not forwarded); `optional` keeps the
