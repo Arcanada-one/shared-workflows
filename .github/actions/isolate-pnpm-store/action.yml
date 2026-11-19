@@ -7,7 +7,9 @@ description: >-
 # Prefer this composite (or the matching systemd drop-in from
 # scripts/render-runner-pnpm-store-dropin.sh) over npm_config_store_dir: pnpm 11
 # ignores npm_config_store_dir and honors pnpm_config_store_dir (measured on
-# pnpm 11.20.0).
+# pnpm 11.20.0). The resolve helper lives beside this action.yml so
+# `uses: .../isolate-pnpm-store@sha` still sees it (composite checkout is
+# action-scoped).
 
 runs:
   using: composite
@@ -20,8 +22,15 @@ runs:
           echo "::error::RUNNER_TEMP is required to derive the runner _work root" >&2
           exit 1
         fi
-        work_dir="$(dirname "$RUNNER_TEMP")"
-        store_dir="${work_dir}/_pnpm-store"
+        resolve="${GITHUB_ACTION_PATH}/resolve-runner-pnpm-store-dir.sh"
+        if [[ ! -f "$resolve" ]]; then
+          echo "::error::missing resolve-runner-pnpm-store-dir.sh beside action.yml" >&2
+          exit 1
+        fi
+        chmod +x "$resolve"
+        # Walks to <runner>/_work/_pnpm-store (same canonical path as the
+        # systemd drop-in). Refuses temps outside */_work/.
+        store_dir="$("$resolve" "$RUNNER_TEMP")"
         mkdir -p "$store_dir"
         echo "pnpm_config_store_dir=${store_dir}" >> "$GITHUB_ENV"
         echo "Isolated pnpm store: ${store_dir}"

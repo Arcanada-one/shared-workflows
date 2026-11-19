@@ -10,6 +10,11 @@
   Bats/assert coverage that locks `pnpm_config_store_dir` (not
   `npm_config_store_dir`) as the working control. Does not apply drop-ins on
   production hosts; Root/ops installs the rendered unit file.
+- **fix(runners):** drop-in renderer fails closed on missing `_work`,
+  `..` segments, and charset outside `[A-Za-z0-9/._-]` (blocks Environment=
+  line injection). Composite action resolves the same canonical
+  `<runner>/_work/_pnpm-store` via `resolve-runner-pnpm-store-dir.sh` and
+  refuses temps outside `*/_work/`.
 - **fix(deploy-static-site):** Cloudflare purge no longer hides a missing
   `CF_API_TOKEN` behind a green deploy. New input `cloudflare_purge` defaults to
   `required` (fail closed when the secret is not forwarded); `optional` keeps the

@@ -9,6 +9,8 @@
 #   render-runner-pnpm-store-dropin.sh --unit-name <systemd-unit> <absolute-runner-root>
 #
 # Prints the drop-in body to stdout. Does not write to /etc or restart units.
+# Refuses relative roots, missing `$runner_root/_work`, `..` segments, and any
+# character outside [A-Za-z0-9/._-] so Environment= cannot be line-injected.
 set -euo pipefail
 
 unit_name=""
@@ -28,6 +30,29 @@ if [[ "$runner_root" != /* ]]; then
 fi
 if [[ "$runner_root" == */ ]]; then
   runner_root="${runner_root%/}"
+fi
+# Fail closed on newline/control/space/= before any filesystem look-up so a
+# crafted path cannot inject a second Environment= line into the drop-in.
+if [[ "$runner_root" == *$'\n'* ]] || [[ "$runner_root" == *$'\r'* ]] \
+  || [[ "$runner_root" == *$'\t'* ]] || [[ "$runner_root" == *' '* ]] \
+  || [[ "$runner_root" == *'='* ]] || [[ "$runner_root" == *'"'* ]] \
+  || [[ "$runner_root" == *"'"* ]] || [[ "$runner_root" == *'\\'* ]]; then
+  echo "runner root contains disallowed characters (newline/control/space/=/quote): refuse" >&2
+  exit 2
+fi
+case "$runner_root" in
+  *..*)
+    echo "runner root must not contain '..' segments: $runner_root" >&2
+    exit 2
+    ;;
+esac
+if [[ ! "$runner_root" =~ ^[A-Za-z0-9/._-]+$ ]]; then
+  echo "runner root charset must be [A-Za-z0-9/._-]: refuse" >&2
+  exit 2
+fi
+if [[ ! -d "${runner_root}/_work" ]]; then
+  echo "runner root must contain an existing _work directory: ${runner_root}/_work" >&2
+  exit 2
 fi
 if [[ -n "$unit_name" && "$unit_name" != *.service ]]; then
   echo "unit name must end with .service: $unit_name" >&2

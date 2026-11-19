@@ -119,6 +119,8 @@ Two complementary fixes ship here:
    `npm_config_store_dir` for pnpm 11 — it is ignored.
 
 ```bash
+# Requires an existing <runner-root>/_work directory; refuses relative paths,
+# '..' segments, and characters outside [A-Za-z0-9/._-] (no Environment= injection).
 ./scripts/render-runner-pnpm-store-dropin.sh /opt/arcanada-runners/arcana-prd-general-11 \
   > /tmp/30-pnpm-store.conf
 # Root/ops installs the file under the unit's .service.d/ and reloads; this
