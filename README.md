@@ -101,3 +101,38 @@ jobs:
 
 Review the uploaded report before changing a private caller to `dry_run: false`.
 The deploy workflow never invokes this janitor.
+
+### Per-runner pnpm store isolation
+
+Self-hosted fleets that run several `Runner.Listener` units as one OS user
+(for example every `arcana-prd-general-*` as `ci-runner`) share
+`~/.local/share/pnpm/store/v11/index.db` by default. Concurrent `pnpm install`
+jobs then contend on that SQLite index and can fail with
+`[ERR_PNPM_ERR_SQLITE_ERROR] disk I/O error` even when the host disk itself is
+healthy.
+
+Two complementary fixes ship here:
+
+1. **Host drop-in (preferred for the whole fleet).** Render a systemd drop-in
+   that sets `pnpm_config_store_dir=<runner-root>/_work/_pnpm-store` (mirrors the
+   existing per-runner `npm_config_cache` pattern). Do **not** use
+   `npm_config_store_dir` for pnpm 11 — it is ignored.
+
+```bash
+# Requires an existing <runner-root>/_work directory; refuses relative paths,
+# '..' segments, and characters outside [A-Za-z0-9/._-] (no Environment= injection).
+./scripts/render-runner-pnpm-store-dropin.sh /opt/arcanada-runners/arcana-prd-general-11 \
+  > /tmp/30-pnpm-store.conf
+# Root/ops installs the file under the unit's .service.d/ and reloads; this
+# repository never mutates production hosts.
+```
+
+2. **Job-level composite (immediate, per workflow).** Call before any
+   `pnpm install`:
+
+```yaml
+- uses: Arcanada-one/shared-workflows/.github/actions/isolate-pnpm-store@<sha>
+```
+
+Regression coverage: `tests/pnpm-store-isolation.bats` plus
+`scripts/assert-pnpm-store-isolation.sh` (pinned `pnpm@11.20.0` via corepack).
